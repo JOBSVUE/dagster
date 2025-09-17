@@ -10,6 +10,8 @@ def resources():
         resources={
             "expensive_resource": ExpensiveResource(),
             "expensive_resource_cache": ExpensiveResourceCache(),
-            "expensive_resource_pickle": ExpensiveResourcePickle(),
+            "expensive_resource_pickle": ExpensiveResourcePickle(
+                cache_file="dagster_resource_cache.pkl"
+            ),
         }
     )

@@ -9,13 +9,11 @@ import dagster as dg
 
 # highlight-start
 class ExpensiveResourcePickle(dg.ConfigurableResource):
-    @property
-    def cache_file(self):
-        return "dagster_resource_cache.pkl"
+    cache_file: str
 
     def _load_cache(self) -> dict:
         try:
-            if self.cache_file.exists():
+            if self.cache_file:
                 with open(self.cache_file, "rb") as f:
                     return pickle.load(f)
             else:
