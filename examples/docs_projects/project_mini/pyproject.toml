@@ -28,5 +28,3 @@ root_module = "project_mini"
 registry_modules = [
     "project_mini.components.*",
 ]
-
-

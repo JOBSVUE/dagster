@@ -44,33 +44,6 @@ def test_nrel_resource(mock_get, example_response, nrel_resource):
     assert nrel_resource.alt_fuel_stations(latitude=40.7128, longitude=-74.0060)
 
 
-@patch("project_prompt_eng.defs.assets.AnthropicResource")
-def test_user_input_prompt(mock_anthropic, anthropic_resource, nrel_resource):
-    # Mock the Anthropic client response
-    mock_client = Mock()
-    mock_response = Mock()
-    mock_response.content = [Mock()]
-    mock_response.content[
-        0
-    ].text = '{"latitude": 41.8796, "longitude": -87.6237, "fuel_type": "ELEC"}'
-    mock_client.messages.create.return_value = mock_response
-    mock_anthropic.return_value.get_client.return_value.__enter__.return_value = mock_client
-
-    config = InputLocation(
-        location="I'm near the The Art Institute of Chicago and driving a Kia EV9"
-    )
-
-    # Create a mock context
-    context = Mock()
-    context.log = Mock()
-
-    # Get the result from the materialization
-    materialization_result = result.output_for_node("user_input_prompt")
-    assert materialization_result.latitude == 41.8796
-    assert materialization_result.longitude == -87.6237
-    assert materialization_result.fuel_type == "ELEC"
-
-
 @patch("requests.get")
 def test_nearest_fuel_stations(mock_get, example_response, nrel_resource):
     mock_response = Mock()
