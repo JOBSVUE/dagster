@@ -2,12 +2,7 @@ from unittest.mock import Mock, patch
 
 import dagster as dg
 import pytest
-from project_prompt_eng.defs.assets import (
-    InputLocation,
-    UserInputSchema,
-    nearest_fuel_stations,
-    user_input_prompt,
-)
+from project_prompt_eng.defs.assets import UserInputSchema, nearest_fuel_stations
 from project_prompt_eng.defs.resources import NRELResource
 
 
