@@ -105,9 +105,12 @@ export type Asset = {
   assetMaterializations: Array<MaterializationEvent>;
   assetObservations: Array<ObservationEvent>;
   definition: Maybe<AssetNode>;
+  freshnessStatusChangedTimestamp: Maybe<Scalars['Float']['output']>;
+  hasDefinitionOrRecord: Scalars['Boolean']['output'];
   id: Scalars['String']['output'];
   key: AssetKey;
   latestEventSortKey: Maybe<Scalars['ID']['output']>;
+  latestFailedToMaterializeTimestamp: Maybe<Scalars['Float']['output']>;
   latestMaterializationTimestamp: Maybe<Scalars['Float']['output']>;
 };
 
@@ -1588,6 +1591,7 @@ export type ExecutionParams = {
 export type ExecutionPlan = {
   __typename: 'ExecutionPlan';
   artifactsPersisted: Scalars['Boolean']['output'];
+  assetKeys: Array<AssetKey>;
   assetSelection: Array<Scalars['String']['output']>;
   steps: Array<ExecutionStep>;
 };
@@ -6325,6 +6329,14 @@ export const buildAsset = (
         : relationshipsToOmit.has('AssetNode')
           ? ({} as AssetNode)
           : buildAssetNode({}, relationshipsToOmit),
+    freshnessStatusChangedTimestamp:
+      overrides && overrides.hasOwnProperty('freshnessStatusChangedTimestamp')
+        ? overrides.freshnessStatusChangedTimestamp!
+        : 5.61,
+    hasDefinitionOrRecord:
+      overrides && overrides.hasOwnProperty('hasDefinitionOrRecord')
+        ? overrides.hasDefinitionOrRecord!
+        : true,
     id: overrides && overrides.hasOwnProperty('id') ? overrides.id! : 'omnis',
     key:
       overrides && overrides.hasOwnProperty('key')
@@ -6336,6 +6348,10 @@ export const buildAsset = (
       overrides && overrides.hasOwnProperty('latestEventSortKey')
         ? overrides.latestEventSortKey!
         : 'b9e5eeed-491e-4839-9bbf-1dedd727f77b',
+    latestFailedToMaterializeTimestamp:
+      overrides && overrides.hasOwnProperty('latestFailedToMaterializeTimestamp')
+        ? overrides.latestFailedToMaterializeTimestamp!
+        : 3.33,
     latestMaterializationTimestamp:
       overrides && overrides.hasOwnProperty('latestMaterializationTimestamp')
         ? overrides.latestMaterializationTimestamp!
@@ -8885,6 +8901,7 @@ export const buildExecutionPlan = (
       overrides && overrides.hasOwnProperty('artifactsPersisted')
         ? overrides.artifactsPersisted!
         : true,
+    assetKeys: overrides && overrides.hasOwnProperty('assetKeys') ? overrides.assetKeys! : [],
     assetSelection:
       overrides && overrides.hasOwnProperty('assetSelection') ? overrides.assetSelection! : [],
     steps: overrides && overrides.hasOwnProperty('steps') ? overrides.steps! : [],

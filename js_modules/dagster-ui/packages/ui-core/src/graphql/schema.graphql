@@ -630,6 +630,9 @@ type Asset {
   latestEventSortKey: ID
   assetHealth: AssetHealth
   latestMaterializationTimestamp: Float
+  hasDefinitionOrRecord: Boolean!
+  latestFailedToMaterializeTimestamp: Float
+  freshnessStatusChangedTimestamp: Float
 }
 
 type AssetResultEventHistoryConnection {
@@ -2323,6 +2326,7 @@ type ExecutionPlan {
   steps: [ExecutionStep!]!
   artifactsPersisted: Boolean!
   assetSelection: [String!]!
+  assetKeys: [AssetKey!]!
 }
 
 type ExecutionStep {

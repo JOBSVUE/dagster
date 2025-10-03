@@ -53,7 +53,6 @@ from dagster._core.remote_representation.external_data import AssetNodeSnap
 from dagster._core.snap.node import GraphDefSnap, OpDefSnap
 from dagster._core.storage.asset_check_execution_record import AssetCheckInstanceSupport
 from dagster._core.storage.event_log.base import AssetRecord
-from dagster._core.storage.partition_status_cache import get_partition_subsets
 from dagster._core.storage.tags import KIND_PREFIX
 from dagster._core.utils import is_valid_email
 from dagster._core.workspace.context import BaseWorkspaceRequestContext
@@ -582,8 +581,9 @@ class GrapheneAssetNode(graphene.ObjectType):
         self,
         graphene_info: ResolveInfo,
     ) -> bool:
-        return graphene_info.context.has_permission_for_location(
-            Permissions.LAUNCH_PIPELINE_EXECUTION, self._repository_selector.location_name
+        return graphene_info.context.has_permission_for_definition(
+            Permissions.LAUNCH_PIPELINE_EXECUTION,
+            self._remote_node,
         )
 
     def resolve_hasReportRunlessAssetEventPermission(
@@ -1128,8 +1128,6 @@ class GrapheneAssetNode(graphene.ObjectType):
         "GrapheneDefaultPartitionStatuses",
         "GrapheneMultiPartitionStatuses",
     ]:
-        asset_key = self._asset_node_snap.asset_key
-
         partitions_def = (
             self._asset_node_snap.partitions.get_partitions_definition()
             if self._asset_node_snap.partitions
@@ -1140,12 +1138,10 @@ class GrapheneAssetNode(graphene.ObjectType):
             materialized_partition_subset,
             failed_partition_subset,
             in_progress_subset,
-        ) = await get_partition_subsets(
-            graphene_info.context.instance,
+        ) = await regenerate_and_check_partition_subsets(
             graphene_info.context,
-            asset_key,
+            self._asset_node_snap,
             graphene_info.context.dynamic_partitions_loader,
-            partitions_def,
         )
 
         return build_partition_statuses(
@@ -1173,6 +1169,13 @@ class GrapheneAssetNode(graphene.ObjectType):
                     self._asset_node_snap,
                     graphene_info.context.dynamic_partitions_loader,
                 )
+
+                if (
+                    materialized_partition_subset is None
+                    or failed_partition_subset is None
+                    or in_progress_subset is None
+                ):
+                    check.failed("Expected partitions subset for a partitioned asset")
 
                 failed_or_in_progress_subset = failed_partition_subset | in_progress_subset
                 failed_and_not_in_progress_subset = failed_partition_subset - in_progress_subset
