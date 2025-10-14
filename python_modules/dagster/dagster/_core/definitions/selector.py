@@ -1,5 +1,5 @@
 from collections.abc import Iterable, Mapping, Sequence
-from typing import AbstractSet, Any, Optional  # noqa: UP035
+from typing import TYPE_CHECKING, AbstractSet, Any, Optional  # noqa: UP035
 
 from dagster_shared.utils.hash import make_hashable
 
@@ -10,6 +10,9 @@ from dagster._core.definitions.events import AssetKey
 from dagster._core.definitions.repository_definition import SINGLETON_REPOSITORY_NAME
 from dagster._record import IHaveNew, record, record_custom
 from dagster._serdes import create_snapshot_id, whitelist_for_serdes
+
+if TYPE_CHECKING:
+    from dagster._core.definitions.assets.graph.base_asset_graph import EntityKey
 
 
 @record_custom
@@ -84,6 +87,13 @@ class JobSubsetSelector(IHaveNew):
             self._hash = hash(make_hashable(self))
         return self._hash
 
+    @property
+    def entity_selection(self) -> Optional[AbstractSet["EntityKey"]]:
+        if self.asset_selection is None and self.asset_check_selection is None:
+            return None
+
+        return (self.asset_selection or set()) | (self.asset_check_selection or set())
+
 
 @whitelist_for_serdes
 @record_custom
@@ -127,10 +137,11 @@ class JobSelector(IHaveNew):
 
     @staticmethod
     def from_graphql_input(graphql_data):
+        job_name = graphql_data.get("jobName") or graphql_data.get("pipelineName")
         return JobSelector(
             location_name=graphql_data["repositoryLocationName"],
             repository_name=graphql_data["repositoryName"],
-            job_name=graphql_data["jobName"],
+            job_name=job_name,
         )
 
     @property

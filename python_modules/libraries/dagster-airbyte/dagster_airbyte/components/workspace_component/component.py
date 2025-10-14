@@ -1,36 +1,31 @@
-from collections.abc import Sequence
+from collections.abc import Iterable, Sequence
 from functools import cached_property
 from typing import Annotated, Callable, Optional, Union
 
 import dagster as dg
 import pydantic
 from dagster._annotations import superseded
-from dagster._core.definitions.job_definition import default_job_io_manager
+from dagster._utils.names import clean_name
 from dagster.components.resolved.base import resolve_fields
-from dagster.components.utils.translation import TranslationFn, TranslationFnResolver
+from dagster.components.utils.translation import (
+    ComponentTranslator,
+    TranslationFn,
+    TranslationFnResolver,
+    create_component_translator_cls,
+)
 from dagster_shared import check
 
-from dagster_airbyte.asset_defs import build_airbyte_assets_definitions
+from dagster_airbyte.asset_decorator import airbyte_assets
 from dagster_airbyte.components.workspace_component.scaffolder import (
     AirbyteWorkspaceComponentScaffolder,
 )
-from dagster_airbyte.resources import AirbyteCloudWorkspace, AirbyteWorkspace
+from dagster_airbyte.resources import AirbyteCloudWorkspace, AirbyteWorkspace, BaseAirbyteWorkspace
 from dagster_airbyte.translator import (
     AirbyteConnection,
     AirbyteConnectionTableProps,
+    AirbyteMetadataSet,
     DagsterAirbyteTranslator,
 )
-
-
-class ProxyDagsterAirbyteTranslator(DagsterAirbyteTranslator):
-    def __init__(self, fn: TranslationFn[AirbyteConnectionTableProps]):
-        self.fn = fn
-
-    def get_asset_spec(self, props: AirbyteConnectionTableProps) -> dg.AssetSpec:
-        base_asset_spec = super().get_asset_spec(props)
-        spec = self.fn(base_asset_spec, props)
-
-        return spec
 
 
 class BaseAirbyteWorkspaceModel(dg.Model, dg.Resolvable):
@@ -197,34 +192,74 @@ class AirbyteWorkspaceComponent(dg.Component, dg.Model, dg.Resolvable):
             TranslationFnResolver(template_vars_for_translation_fn=lambda data: {"props": data}),
         ]
     ] = pydantic.Field(
-        None,
+        default=None,
         description="Function used to translate Airbyte connection table properties into Dagster asset specs.",
     )
 
     @cached_property
     def translator(self) -> DagsterAirbyteTranslator:
-        if self.translation:
-            return ProxyDagsterAirbyteTranslator(self.translation)
+        return AirbyteComponentTranslator(self)
+
+    @cached_property
+    def _base_translator(self) -> DagsterAirbyteTranslator:
         return DagsterAirbyteTranslator()
 
+    def get_asset_spec(self, props: AirbyteConnectionTableProps) -> dg.AssetSpec:
+        return self._base_translator.get_asset_spec(props)
+
+    def execute(
+        self, context: dg.AssetExecutionContext, airbyte: BaseAirbyteWorkspace
+    ) -> Iterable[Union[dg.AssetMaterialization, dg.MaterializeResult]]:
+        yield from airbyte.sync_and_poll(context=context)
+
     def build_defs(self, context: dg.ComponentLoadContext) -> dg.Definitions:
-        airbyte_assets = build_airbyte_assets_definitions(
-            workspace=self.workspace,
+        connection_selector_fn = self.connection_selector or (lambda connection: True)
+
+        all_asset_specs = self.workspace.load_asset_specs(
             dagster_airbyte_translator=self.translator,
-            connection_selector_fn=self.connection_selector,
+            connection_selector_fn=connection_selector_fn,
         )
-        assets_with_resource = [
-            airbyte_asset.with_resources(
-                {
-                    "airbyte": self.workspace.get_resource_definition(),
-                    "io_manager": default_job_io_manager,
-                }
+
+        connections = {
+            (
+                check.not_none(AirbyteMetadataSet.extract(spec.metadata).connection_id),
+                check.not_none(AirbyteMetadataSet.extract(spec.metadata).connection_name),
             )
-            for airbyte_asset in airbyte_assets
-        ]
-        return dg.Definitions(assets=assets_with_resource)
+            for spec in all_asset_specs
+        }
+
+        assets = []
+        for connection_id, connection_name in connections:
+
+            @airbyte_assets(
+                connection_id=connection_id,
+                workspace=self.workspace,
+                name=f"airbyte_{clean_name(connection_name)}",
+                dagster_airbyte_translator=self.translator,
+            )
+            def _asset_fn(context: dg.AssetExecutionContext):
+                yield from self.execute(context=context, airbyte=self.workspace)
+
+            assets.append(_asset_fn)
+
+        return dg.Definitions(assets=assets)
 
 
 # Subclassing to create the alias to be able to use the superseded decorator.
 @superseded(additional_warn_text="Superseded. Use AirbyteWorkspaceComponent instead.")
 class AirbyteCloudWorkspaceComponent(AirbyteWorkspaceComponent): ...
+
+
+class AirbyteComponentTranslator(
+    create_component_translator_cls(AirbyteWorkspaceComponent, DagsterAirbyteTranslator),
+    ComponentTranslator[AirbyteWorkspaceComponent],
+):
+    def __init__(self, component: AirbyteWorkspaceComponent):
+        self._component = component
+
+    def get_asset_spec(self, props: AirbyteConnectionTableProps) -> dg.AssetSpec:
+        base_asset_spec = super().get_asset_spec(props)
+        if self.component.translation is None:
+            return base_asset_spec
+        else:
+            return self.component.translation(base_asset_spec, props)

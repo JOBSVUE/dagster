@@ -173,17 +173,8 @@ class CodeLocation(AbstractContextManager):
         subset_result = self._get_subset_remote_job_result(selector)
         return self._get_remote_job_from_subset_result(selector, subset_result)
 
-    async def gen_job(self, selector: JobSubsetSelector) -> RemoteJob:
-        """Return the RemoteJob for a specific pipeline. Subclasses only
-        need to implement gen_subset_remote_job_result to handle the case where
-        an op selection is specified, which requires access to the underlying JobDefinition
-        to generate the subsetted pipeline snapshot.
-        """
-        if not selector.is_subset_selection:
-            return self.get_repository(selector.repository_name).get_full_job(selector.job_name)
-
+    async def gen_subset_job(self, selector: JobSubsetSelector) -> RemoteJob:
         subset_result = await self._gen_subset_remote_job_result(selector)
-
         return self._get_remote_job_from_subset_result(selector, subset_result)
 
     @abstractmethod
@@ -657,9 +648,7 @@ class GrpcServerCodeLocation(CodeLocation):
     ):
         from dagster._api.get_server_id import sync_get_server_id
         from dagster._api.list_repositories import sync_list_repositories_grpc
-        from dagster._api.snapshot_repository import (
-            sync_get_streaming_external_repositories_data_grpc,
-        )
+        from dagster._api.snapshot_repository import sync_get_external_repositories_data_grpc
         from dagster._grpc.client import DagsterGrpcClient, client_heartbeat_thread
 
         self._origin = check.inst_param(origin, "origin", CodeLocationOrigin)
@@ -738,7 +727,7 @@ class GrpcServerCodeLocation(CodeLocation):
 
             self._container_context = list_repositories_response.container_context
 
-            self._repository_snaps = sync_get_streaming_external_repositories_data_grpc(
+            self._repository_snaps = sync_get_external_repositories_data_grpc(
                 self.client,
                 self,
             )
